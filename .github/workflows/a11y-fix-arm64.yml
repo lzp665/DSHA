@@ -30,7 +30,7 @@ jobs:
           distribution: temurin
           java-version: ${{ steps.toolchain.outputs.java }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ steps.toolchain.outputs.node }}
 
