@@ -36,10 +36,20 @@ jobs:
 
       - name: Android SDK
         run: |
+          # runner 上 sdkmanager 不在 PATH；ANDROID_HOME 由 runner 镜像导出。
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          echo "SDK_ROOT=$SDK_ROOT"
+          SDKMANAGER="$(ls -d "$SDK_ROOT"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -1)"
+          test -n "$SDKMANAGER" || SDKMANAGER="$(command -v sdkmanager)"
+          echo "SDKMANAGER=$SDKMANAGER"
           platform=$(python3 tools/ci-toolchain.py --field androidPlatform)
           buildtools=$(python3 tools/ci-toolchain.py --field buildTools)
-          sdkmanager "platforms;$platform" "build-tools;$buildtools" "platform-tools"
-          yes | sdkmanager --licenses >/dev/null
+          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" "platforms;$platform" "build-tools;$buildtools" "platform-tools"
+          # 让后续 Gradle 用同一套 SDK 和已许可组件。
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          "$SDK_ROOT"/build-tools/"$buildtools"/aapt2 version
 
       - name: Host runtime descriptor and backup proofs
         run: |
