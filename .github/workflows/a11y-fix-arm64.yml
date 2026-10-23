@@ -1,0 +1,76 @@
+name: Build accessibility-fix APK (arm64)
+
+# 只用于本分支：把「无障碍一进设置就掉」的修复打成可直接安装的 release APK。
+# 签名使用固定测试密钥（committed at ci/a11y-fix-test.keystore），
+# 因此与官方 APK 签名不同，不能覆盖安装官方版本（需先卸载）。
+on:
+  workflow_dispatch:
+  push:
+    branches: [ a11y-fix ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          lfs: true
+
+      - name: Verify toolchain against source configuration
+        id: toolchain
+        run: python3 tools/ci-toolchain.py --github-output
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ steps.toolchain.outputs.java }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.toolchain.outputs.node }}
+
+      - name: Android SDK
+        run: |
+          platform=$(python3 tools/ci-toolchain.py --field androidPlatform)
+          buildtools=$(python3 tools/ci-toolchain.py --field buildTools)
+          sdkmanager "platforms;$platform" "build-tools;$buildtools" "platform-tools"
+          yes | sdkmanager --licenses >/dev/null
+
+      - name: Host runtime descriptor and backup proofs
+        run: |
+          python3 tools/prepare-runtime-descriptor.py --check
+          python3 -B tools/prepare-backup-assets.py --check
+
+      - name: Accessibility unit tests
+        run: |
+          ./gradlew --no-daemon :app:testStandardDebugUnitTest \
+            --tests "com.deepseekharness.app.util.Accessibility*" \
+            -Dfile.encoding=UTF-8
+
+      - name: Assemble signed standard release
+        env:
+          DSHA_KEYSTORE: ${{ github.workspace }}/ci/a11y-fix-test.keystore
+          DSHA_KEYSTORE_PASSWORD: dsha-a11y-fix
+          DSHA_KEY_PASSWORD: dsha-a11y-fix
+          DSHA_KEY_ALIAS: dsha-a11y-fix
+        run: |
+          ./gradlew --no-daemon :app:assembleStandardRelease
+
+      - name: Collect APKs
+        if: always()
+        run: |
+          mkdir -p out
+          find app/build/outputs/apk -name "*.apk" -exec cp -v {} out/ \;
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dsha-a11y-fix
+          path: out/*.apk
+          if-no-files-found: warn
