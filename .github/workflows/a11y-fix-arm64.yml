@@ -5,6 +5,15 @@ name: Build accessibility-fix APK (arm64)
 # 因此与官方 APK 签名不同，不能覆盖安装官方版本（需先卸载）。
 on:
   workflow_dispatch:
+    inputs:
+      asset_bundle_url:
+        description: locked-inputs.zip 的 Release 下载地址
+        required: false
+        default: https://github.com/lzp665/DSHA/releases/download/a11y-inputs/locked-inputs.zip
+      asset_bundle_sha256:
+        description: 该输入包的固定 SHA-256
+        required: false
+        default: 57b384627c016393dc68fbdfa63813ca0d0520c632de875eae6cd2e6f7382d90
   push:
     branches: [ a11y-fix ]
 
@@ -53,8 +62,9 @@ jobs:
 
       - name: Restore exact offline inputs
         env:
-          INPUT_URL: ${{ inputs.asset_bundle_url }}
-          INPUT_SHA: ${{ inputs.asset_bundle_sha256 }}
+          # push 触发时 inputs 为空，回退到本仓库默认的 Release 输入包。
+          INPUT_URL: ${{ inputs.asset_bundle_url || 'https://github.com/lzp665/DSHA/releases/download/a11y-inputs/locked-inputs.zip' }}
+          INPUT_SHA: ${{ inputs.asset_bundle_sha256 || '57b384627c016393dc68fbdfa63813ca0d0520c632de875eae6cd2e6f7382d90' }}
         run: |
           # git 不跟踪 .bin 大文件；先按官方 ci-assets 约定从 Release 还原到项目路径。
           python3 tools/ci-assets.py --url "$INPUT_URL" --sha256 "$INPUT_SHA"
