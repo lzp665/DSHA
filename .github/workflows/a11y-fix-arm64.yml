@@ -51,6 +51,15 @@ jobs:
           echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
           "$SDK_ROOT"/build-tools/"$buildtools"/aapt2 version
 
+      - name: Restore exact offline inputs
+        env:
+          INPUT_URL: ${{ inputs.asset_bundle_url }}
+          INPUT_SHA: ${{ inputs.asset_bundle_sha256 }}
+        run: |
+          # git 不跟踪 .bin 大文件；先按官方 ci-assets 约定从 Release 还原到项目路径。
+          python3 tools/ci-assets.py --url "$INPUT_URL" --sha256 "$INPUT_SHA"
+          ls -la app/src/main/assets/*.bin tools/recovery-runtime/archives/ 2>/dev/null
+
       - name: Host runtime descriptor and backup proofs
         run: |
           python3 tools/prepare-runtime-descriptor.py --check
