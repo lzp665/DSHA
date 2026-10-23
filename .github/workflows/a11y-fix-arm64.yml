@@ -81,14 +81,27 @@ jobs:
             --tests "com.deepseekharness.app.util.Accessibility*" \
             -Dfile.encoding=UTF-8
 
-      - name: Assemble signed standard release
-        env:
-          DSHA_KEYSTORE: ${{ github.workspace }}/ci/a11y-fix-test.keystore
-          DSHA_KEYSTORE_PASSWORD: dsha-a11y-fix
-          DSHA_KEY_PASSWORD: dsha-a11y-fix
-          DSHA_KEY_ALIAS: dsha-a11y-fix
+      - name: Assemble unsigned standard release
+        # 官方提供的无签名模式：跳过 E7E3 发布证书校验，产出 unsigned APK。
         run: |
-          ./gradlew --no-daemon :app:assembleStandardRelease
+          ./gradlew --no-daemon -Pdsha.unsignedPackage=true :app:assembleStandardRelease
+          find app/build/outputs/apk -name "*.apk" -exec ls -la {} \;
+
+      - name: Sign with the test key
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          BUILD_TOOLS=$(python3 tools/ci-toolchain.py --field buildTools)
+          APKSIGNER="$SDK_ROOT/build-tools/$BUILD_TOOLS/apksigner"
+          UNSIGNED=$(find app/build/outputs/apk/standard/release -name "*-unsigned.apk" | head -1)
+          test -n "$UNSIGNED" || { echo "找不到 unsigned APK"; exit 1; }
+          "$APKSIGNER" sign \
+            --ks ci/a11y-fix-test.keystore \
+            --ks-pass pass:dsha-a11y-fix \
+            --key-pass pass:dsha-a11y-fix \
+            --ks-key-alias dsha-a11y-fix \
+            --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+            --out "app/build/outputs/apk/standard/release/dsha-a11y-fix.apk" "$UNSIGNED"
+          "$APKSIGNER" verify --print-certs "app/build/outputs/apk/standard/release/dsha-a11y-fix.apk"
 
       - name: Collect APKs
         if: always()
